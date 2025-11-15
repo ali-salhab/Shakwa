@@ -1,80 +1,57 @@
-// app/(tabs)/_layout.tsx
-import { Tabs } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Animated, useWindowDimensions } from "react-native";
+import { Tabs, useRouter, useSegments } from "expo-router";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import React from "react";
+import React, { useState } from "react";
+import { TopBar } from "../../components/TopBar";
+import { NotificationsModal } from "../../components/NotificationsModal";
+import { CustomBottomBar } from "../../components/CustomBottomBar";
 
 export default function TabsLayout() {
-  const animatedValue = React.useRef(new Animated.Value(0)).current;
   const { height } = useWindowDimensions();
+  const [notificationsVisible, setNotificationsVisible] = useState(false);
+  const router = useRouter();
+  const segments = useSegments();
+  const currentRoute = segments[segments.length - 1] || "my-complaints";
 
-  React.useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(animatedValue, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(animatedValue, {
-          toValue: 0,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, [animatedValue]);
+  const tabItems = [
+    { name: "my-complaints", icon: "file-document-multiple", label: "شكاويّي", route: "my-complaints" },
+    { name: "add-complaints", icon: "plus-circle", label: "شكوى", route: "add-complaints" },
+    { name: "profile", icon: "account-circle", label: "الملف", route: "profile" },
+  ];
 
-  const animatedStyle = React.useMemo(
-    () => ({
-      opacity: animatedValue,
-      transform: [
-        {
-          scale: animatedValue.interpolate({
-            inputRange: [0, 1],
-            outputRange: [1, 1.1],
-          }),
-        },
-      ],
-    }),
-    [animatedValue]
-  );
+  const handleTabPress = (route: string) => {
+    if (route === "my-complaints") router.push("/(tabs)/my-complaints");
+    else if (route === "add-complaints") router.push("/(tabs)/add-complaints");
+    else if (route === "profile") router.push("/(tabs)/profile");
+  };
 
   return (
     <SafeAreaView style={[styles.container, { minHeight: height }]}>
-      <Animated.View
-        style={[styles.animatedContainer, animatedStyle]}
-      ></Animated.View>
-      <Tabs screenOptions={{ headerShown: false }}>
-        <Tabs.Screen
-          name="my-complaints"
-          options={{
-            title: "شكاويّي",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="document-text" size={size} color={color} />
-            ),
+      <TopBar onNotificationPress={() => setNotificationsVisible(true)} />
+      <NotificationsModal
+        visible={notificationsVisible}
+        onClose={() => setNotificationsVisible(false)}
+      />
+      <View style={styles.tabsContainer}>
+        <Tabs
+          screenOptions={{
+            headerShown: false,
+            tabBarStyle: { display: "none" },
+            sceneStyle: {
+              backgroundColor: "#0a1418",
+            },
           }}
-        />
-        <Tabs.Screen
-          name="add-complaint"
-          options={{
-            title: " شكوى",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="document-text" size={size} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: "الملف",
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="person" size={size} color={color} />
-            ),
-          }}
-        />
-      </Tabs>
+        >
+          <Tabs.Screen name="my-complaints" options={{ title: "شكاويّي" }} />
+          <Tabs.Screen name="add-complaints" options={{ title: "شكوى" }} />
+          <Tabs.Screen name="profile" options={{ title: "الملف" }} />
+        </Tabs>
+      </View>
+      <CustomBottomBar
+        activeRoute={currentRoute}
+        onPress={handleTabPress}
+        tabs={tabItems}
+      />
     </SafeAreaView>
   );
 }
@@ -83,10 +60,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     overflow: "hidden",
+    backgroundColor: "#0a1418",
   },
-  animatedContainer: {
-    // flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  tabsContainer: {
+    flex: 1,
   },
 });

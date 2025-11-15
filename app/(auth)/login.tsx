@@ -1,5 +1,6 @@
 import React, { useContext, useState, useRef, useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
+
 import {
   View,
   TextInput,
@@ -13,6 +14,7 @@ import {
 import { AuthContext } from "../../src/context/AuthContext";
 import { useRouter } from "expo-router";
 import { BlurView } from "expo-blur";
+import { COLORS } from "../../theme/colors";
 
 export default function Login() {
   const { login } = useContext(AuthContext);
@@ -82,13 +84,13 @@ export default function Login() {
 
   const bgColor = bgColorAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ["#39505fff", "#39505fee"],
+    outputRange: ["#1a2a3aff", "#162238ee"],
   });
 
   return (
     <SafeAreaView style={[styles.maincontainer, { minHeight: "100%" }]}>
       <Animated.View style={[styles.bgContainer, { backgroundColor: bgColor }]}>
-        <BlurView intensity={30} style={styles.container}>
+        <BlurView intensity={40} style={styles.container}>
           <ScrollView contentContainerStyle={styles.scrollContent}>
             {/* Logo with Animation */}
             <Animated.View style={[styles.logoContainer, logoStyle]}>
@@ -147,7 +149,7 @@ export default function Login() {
 
 const styles = StyleSheet.create({
   bgContainer: {
-    padding: 12,
+    padding: 16,
     flex: 1,
     direction: "rtl",
   },
@@ -155,116 +157,96 @@ const styles = StyleSheet.create({
     direction: "rtl",
     flex: 1,
     justifyContent: "center",
-    // padding: 20,
-    // backgroundColor: "",
-    backgroundColor: "#ffffff05",
-
-    // marginHorizontal: 10,
+    backgroundColor: "#0a1418",
   },
   container: {
     flex: 1,
     justifyContent: "center",
-    // padding: 20,
+    paddingHorizontal: 20,
   },
   scrollContent: {
     justifyContent: "center",
+    paddingVertical: 40,
   },
   logoContainer: {
     alignItems: "center",
-    marginBottom: 30,
+    marginBottom: 40,
   },
   logoBg: {
     direction: "rtl",
-
-    padding: 12,
-    marginBottom: 12,
-
-    //
-    // borderRadius: 40,
-    // backgroundColor: "#8b1313ff",
+    padding: 20,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#fff9f9ff",
+    shadowColor: COLORS.light.primary,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 1,
-    elevation: 1,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   logoText: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    // width: 80,
-    // height: 80,
-    // borderRadius: 40,
-    backgroundColor: "#250606ff",
-    marginTop: 20,
-    borderRadius: 12,
-    padding: 12,
-
-    fontSize: 40,
+    backgroundColor: COLORS.dark.primary,
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 42,
     fontWeight: "900",
     color: "#fff",
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
-    marginBottom: 8,
+    fontSize: 32,
+    fontWeight: "800",
+    marginBottom: 10,
     textAlign: "center",
     color: "#fff",
   },
   subtitle: {
-    fontSize: 14,
-    color: "#e0e0e0",
+    fontSize: 15,
+    color: "#b0b8c1",
     textAlign: "center",
-    marginBottom: 24,
+    marginBottom: 32,
   },
   input: {
     direction: "rtl",
-
     borderWidth: 1.5,
-    borderColor: "#0F4C75",
-    padding: 14,
-    borderRadius: 12,
+    borderColor: COLORS.dark.border,
+    padding: 16,
+    borderRadius: 14,
     marginBottom: 16,
-    backgroundColor: "#f9f9f9",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     fontSize: 16,
-    color: "#333",
+    color: "#fff",
   },
   loginBtn: {
     direction: "rtl",
-
-    backgroundColor: "#ffffffbf",
+    backgroundColor: COLORS.dark.primary,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: "center",
-    marginTop: 8,
-    marginBottom: 24,
-    shadowColor: "#FF6B6B",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    marginTop: 12,
+    marginBottom: 32,
+    shadowColor: COLORS.dark.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
   },
   loginBtnText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
   },
   dividerText: {
     textAlign: "center",
-    color: "#ccc",
+    color: "#7a8892",
     marginBottom: 16,
     fontSize: 14,
   },
-
   registerText: {
     textAlign: "center",
-    color: "#e0e0e0",
+    color: "#b0b8c1",
     fontSize: 14,
   },
   registerLink: {
-    color: "#FF6B6B",
+    color: COLORS.dark.primary,
     fontWeight: "700",
   },
 });

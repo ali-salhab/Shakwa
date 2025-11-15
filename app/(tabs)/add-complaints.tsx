@@ -1,4 +1,3 @@
-// app/(tabs)/add-complaints.tsx
 import React, { useEffect, useRef, useState } from "react";
 import {
   View,
@@ -14,16 +13,18 @@ import {
   ActivityIndicator,
   Alert,
   StyleSheet,
+  SafeAreaView,
 } from "react-native";
-// @ts-ignore: expo-linear-gradient types may be missing in some setups
 import { LinearGradient } from "expo-linear-gradient";
-// @ts-ignore: expo-blur types may be missing in some setups
 import { BlurView } from "expo-blur";
-// @ts-ignore: missing type declarations for expo-image-picker in this project
 import * as ImagePicker from "expo-image-picker";
-// @ts-ignore: missing type declarations for expo-document-picker in this project
 import * as DocumentPicker from "expo-document-picker";
+import * as Location from "expo-location";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import api from "../../src/api";
+import { useTheme } from "../../src/hooks/useTheme";
+import { useComplaints } from "../../src/hooks/useComplaints";
+import { COLORS } from "../../theme/colors";
 
 type Attachment = {
   uri: string;
@@ -32,18 +33,47 @@ type Attachment = {
   isImage?: boolean;
 };
 
+const COMPLAINT_TYPES = [
+  "صيانة عامة",
+  "نظافة",
+  "سلامة",
+  "كهرباء",
+  "سباكة",
+  "دهان",
+  "أسقف",
+  "أرضيات",
+  "إضاءة",
+  "تهوية",
+  "شبابيك",
+  "أبواب",
+  "آخر",
+];
+
+const PRIORITY_OPTIONS = [
+  { label: "منخفضة", value: "low" },
+  { label: "متوسطة", value: "medium" },
+  { label: "عالية", value: "high" },
+];
+
 export default function AddComplaint() {
+  const { themeType } = useTheme();
+  const { addComplaint } = useComplaints();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("");
   const [type, setType] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
 
-  // animated values for UI polish
-  const headerAnim = useRef(new Animated.Value(0)).current; // 0 -> collapsed, 1 -> expanded
+  const headerAnim = useRef(new Animated.Value(0)).current;
   const submitScale = useRef(new Animated.Value(1)).current;
   const attachmentsFade = useRef(new Animated.Value(0)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(headerAnim, {
@@ -107,17 +137,73 @@ export default function AddComplaint() {
   };
 
   const removeAttachment = (index: number) => {
-    // simple animation on remove
     const next = attachments.slice();
     next.splice(index, 1);
     setAttachments(next);
   };
 
-  const onPressSubmit = async () => {
-    if (!title.trim() || !type.trim()) {
-      return Alert.alert("خطأ", "الرجاء إدخال العنوان والنوع");
+  const requestLocationPermission = async () => {
+    try {
+      setLocationLoading(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== "granted") {
+        Alert.alert(
+          "إذن مرفوض",
+          "يرجى تفعيل إذن الموقع في إعدادات التطبيق للمتابعة"
+        );
+        setLocationLoading(false);
+        return;
+      }
+
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const { latitude, longitude } = currentLocation.coords;
+      
+      try {
+        const reverseGeocode = await Location.reverseGeocodeAsync({
+          latitude,
+          longitude,
+        });
+
+        if (reverseGeocode && reverseGeocode.length > 0) {
+          const address = reverseGeocode[0];
+          const locationText = [
+            address.name,
+            address.street,
+            address.city,
+            address.region,
+          ]
+            .filter(Boolean)
+            .join(", ");
+          setLocation(locationText || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        } else {
+          setLocation(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        }
+        Alert.alert("نجاح", "تم الحصول على موقعك بنجاح");
+      } catch {
+        setLocation(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        Alert.alert("نجاح", "تم الحصول على إحداثيات موقعك");
+      }
+    } catch (error: any) {
+      Alert.alert(
+        "خطأ",
+        error.message || "حدث خطأ أثناء الحصول على الموقع"
+      );
+    } finally {
+      setLocationLoading(false);
     }
-    // press feedback
+  };
+
+  const isFormValid = title.trim() && description.trim() && type.trim();
+
+  const onPressSubmit = async () => {
+    if (!isFormValid) {
+      return;
+    }
+
     Animated.sequence([
       Animated.timing(submitScale, {
         toValue: 0.95,
@@ -135,6 +221,10 @@ export default function AddComplaint() {
     form.append("title", title.trim());
     form.append("description", description.trim());
     form.append("type", type.trim());
+    form.append("location", location.trim());
+    form.append("priority", priority);
+    form.append("phone", phone.trim());
+    form.append("email", email.trim());
 
     attachments.forEach((a, i) => {
       form.append("attachments", {
@@ -144,232 +234,402 @@ export default function AddComplaint() {
       } as any);
     });
 
+    setLoading(true);
+    Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 2000,
+        useNativeDriver: true,
+      })
+    ).start();
+
     try {
-      setLoading(true);
       await api.post("/complaints", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
+      addComplaint({
+        title: title.trim(),
+        description: description.trim(),
+        type: type.trim(),
+        location: location.trim(),
+        priority: priority as 'low' | 'medium' | 'high',
+        phone: phone.trim(),
+        email: email.trim(),
+      });
       Alert.alert("نجاح", "تم إرسال الشكوى");
-      setTitle("");
-      setDescription("");
-      setType("");
-      setAttachments([]);
+      resetForm();
     } catch (err: any) {
       console.warn(err);
-      Alert.alert("فشل", err?.response?.data?.message || "فشل الإرسال");
+      addComplaint({
+        title: title.trim(),
+        description: description.trim(),
+        type: type.trim(),
+        location: location.trim(),
+        priority: priority as 'low' | 'medium' | 'high',
+        phone: phone.trim(),
+        email: email.trim(),
+      });
+      Alert.alert("نجاح", "تم إضافة الشكوى محليًا");
+      resetForm();
     } finally {
       setLoading(false);
+      spinAnim.setValue(0);
     }
   };
 
-  // small reusable chip options for types to improve UX
-  const commonTypes = ["خدمات", "نظافة", "سلامة", "آخر"];
+  const resetForm = () => {
+    setTitle("");
+    setDescription("");
+    setLocation("");
+    setType("");
+    setPriority("medium");
+    setPhone("");
+    setEmail("");
+    setAttachments([]);
+  };
+
+  const spinRotation = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const isDark = themeType === "dark";
+  const colors = isDark ? COLORS.dark : COLORS.light;
+  const bgColor = isDark ? "#0a1418" : colors.background;
+  const surfaceColor = isDark ? "rgba(255,255,255,0.08)" : colors.surface;
+  const textColor = isDark ? "#fff" : colors.text;
+  const secondaryTextColor = isDark ? "#b0b8c1" : colors.textSecondary;
+  const borderColor = isDark ? "rgba(255,255,255,0.1)" : colors.border;
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.select({ ios: "padding", android: undefined })}
-    >
-      <LinearGradient
-        colors={["#0f172a", "#0b3a7a", "#2a5298"]}
-        start={[0, 0]}
-        end={[1, 1]}
-        style={styles.gradient}
-      >
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
+    <>
+      <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.select({ ios: "padding", android: undefined })}
         >
-          <Animated.View
-            style={[
-              styles.header,
-              {
-                transform: [
+          <View style={[styles.gradient, { backgroundColor: bgColor }]}>
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              scrollEnabled={true}
+            >
+              <Animated.View
+                style={[
+                  styles.header,
                   {
-                    translateY: headerAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-20, 0],
-                    }),
+                    transform: [
+                      {
+                        translateY: headerAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [-20, 0],
+                        }),
+                      },
+                      {
+                        scale: headerAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.98, 1],
+                        }),
+                      },
+                    ],
+                    opacity: headerAnim,
                   },
-                  {
-                    scale: headerAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.98, 1],
-                    }),
-                  },
-                ],
-                opacity: headerAnim,
-              },
-            ]}
-          >
-            <BlurView intensity={60} tint="dark" style={styles.headerBlur}>
-              <Text style={styles.title}>إضافة شكوى</Text>
-              <Text style={styles.subtitle}>
-                أرسل شكواك مع مرفقات — سهل وسريع
-              </Text>
-            </BlurView>
-          </Animated.View>
+                ]}
+              >
+                <View style={[styles.headerBlur, { backgroundColor: isDark ? "rgba(26, 42, 58, 0.9)" : colors.surface }]}>
+                  <Text style={[styles.title, { color: textColor }]}>إضافة شكوى</Text>
+                  <Text style={[styles.subtitle, { color: secondaryTextColor }]}>
+                    أرسل شكواك مع التفاصيل والمرفقات
+                  </Text>
+                </View>
+              </Animated.View>
 
-          <View style={styles.card}>
-            <FloatingInput
-              label="العنوان"
-              value={title}
-              onChangeText={setTitle}
-            />
-            <FloatingInput
-              label="الوصف"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-            />
+              <View style={[styles.card, { backgroundColor: surfaceColor, borderColor }]}>
+                <Text style={[styles.sectionTitle, { color: textColor }]}>المعلومات الأساسية</Text>
+                
+                <FloatingInput
+                  label="العنوان"
+                  value={title}
+                  onChangeText={setTitle}
+                  theme={themeType}
+                  icon="title"
+                />
+                
+                <FloatingInput
+                  label="الوصف التفصيلي"
+                  value={description}
+                  onChangeText={setDescription}
+                  multiline
+                  numberOfLines={4}
+                  theme={themeType}
+                  icon="file-document"
+                />
 
-            <Text style={styles.label}>نوع الشكوى</Text>
-            <View style={styles.chipsRow}>
-              {commonTypes.map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  onPress={() => setType(t)}
+                <View style={{ marginBottom: 12 }}>
+                  <View style={[styles.inputWrap, { 
+                    backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#f5f7fb",
+                    borderColor: isDark ? "rgba(255,255,255,0.1)" : colors.border,
+                  }]}>
+                    <TouchableOpacity
+                      onPress={requestLocationPermission}
+                      disabled={locationLoading}
+                      style={styles.locationButton}
+                    >
+                      <ActivityIndicator
+                        animating={locationLoading}
+                        size="small"
+                        color={colors.primary}
+                      />
+                      {!locationLoading && (
+                        <MaterialCommunityIcons
+                          name="map-marker"
+                          size={18}
+                          color={colors.primary}
+                        />
+                      )}
+                    </TouchableOpacity>
+                    <TextInput
+                      value={location}
+                      onChangeText={setLocation}
+                      style={[
+                        styles.input,
+                        { color: isDark ? "#fff" : colors.text },
+                      ]}
+                      placeholder="الموقع / المكان"
+                      placeholderTextColor={isDark ? "rgba(129, 102, 102, 0.45)" : colors.textSecondary}
+                    />
+                  </View>
+                  <Text style={[styles.helperText, { color: secondaryTextColor }]}>
+                    اضغط على الأيقونة للحصول على موقعك تلقائياً
+                  </Text>
+                </View>
+
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={[styles.label, { color: textColor }]}>نوع الشكوى</Text>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    scrollEventThrottle={16}
+                    style={styles.typesScroll}
+                    contentContainerStyle={styles.typesScrollContent}
+                  >
+                    {COMPLAINT_TYPES.map((t) => (
+                      <TouchableOpacity
+                        key={t}
+                        onPress={() => setType(t)}
+                        style={[
+                          styles.typeChip,
+                          {
+                            borderColor: type === t ? colors.primary : borderColor,
+                            backgroundColor: type === t 
+                              ? isDark ? `${colors.primary}20` : `${colors.primary}15`
+                              : "transparent",
+                            borderWidth: type === t ? 2 : 1,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.typeChipText,
+                            { color: type === t ? colors.primary : secondaryTextColor },
+                          ]}
+                        >
+                          {t}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                <Text style={[styles.sectionTitle, { color: textColor }]}>الأولوية والتفاصيل الإضافية</Text>
+
+                <View style={styles.priorityRow}>
+                  {PRIORITY_OPTIONS.map((opt) => (
+                    <TouchableOpacity
+                      key={opt.value}
+                      onPress={() => setPriority(opt.value)}
+                      style={[
+                        styles.priorityButton,
+                        {
+                          backgroundColor: priority === opt.value
+                            ? isDark ? `${colors.primary}30` : `${colors.primary}10`
+                            : "transparent",
+                          borderColor: priority === opt.value ? colors.primary : borderColor,
+                          borderWidth: priority === opt.value ? 2 : 1,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.priorityText,
+                          { color: priority === opt.value ? colors.primary : secondaryTextColor },
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <FloatingInput
+                  label="رقم الهاتف"
+                  value={phone}
+                  onChangeText={setPhone}
+                  theme={themeType}
+                  icon="phone"
+                />
+
+                <FloatingInput
+                  label="البريد الإلكتروني"
+                  value={email}
+                  onChangeText={setEmail}
+                  theme={themeType}
+                  icon="email"
+                />
+
+                <View style={{ height: 12 }} />
+
+                <View style={styles.actionsRow}>
+                  <TouchableOpacity
+                    onPress={() => setModalVisible(true)}
+                    style={styles.iconButton}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={[colors.primary, colors.secondary]}
+                      style={styles.iconButtonGradient}
+                    >
+                      <MaterialCommunityIcons name="plus" size={24} color="#fff" />
+                    </LinearGradient>
+                    <Text style={[styles.iconLabel, { color: secondaryTextColor }]}>أضف مرفق</Text>
+                  </TouchableOpacity>
+
+                  <View style={{ flex: 1 }} />
+
+                  <Animated.View style={{ transform: [{ scale: submitScale }], opacity: isFormValid ? 1 : 0.5 }}>
+                    <TouchableOpacity
+                      onPress={onPressSubmit}
+                      activeOpacity={0.9}
+                      disabled={loading || !isFormValid}
+                      style={styles.submitWrap}
+                    >
+                      <LinearGradient
+                        colors={isFormValid ? [colors.primary, colors.secondary] : ["#c0c0c0", "#b0b0b0"]}
+                        start={[0, 0]}
+                        end={[1, 1]}
+                        style={styles.submitButton}
+                      >
+                        {loading ? (
+                          <ActivityIndicator color={textColor} />
+                        ) : (
+                          <Text style={[styles.submitText, { color: "#fff" }]}>{isFormValid ? "إرسال" : "أكمل الحقول"}</Text>
+                        )}
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </Animated.View>
+                </View>
+
+                <Animated.View
                   style={[
-                    styles.chip,
-                    type === t && { backgroundColor: "rgba(255,255,255,0.12)" },
+                    styles.attachmentsContainer,
+                    { opacity: attachmentsFade },
                   ]}
                 >
-                  <Text
-                    style={[styles.chipText, type === t && { color: "#fff" }]}
-                  >
-                    {t}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <FloatingInput
-              label="أو اكتب نوع آخر"
-              value={type}
-              onChangeText={setType}
-            />
-
-            <View style={{ height: 12 }} />
-
-            <View style={styles.actionsRow}>
-              <TouchableOpacity
-                onPress={() => setModalVisible(true)}
-                style={styles.iconButton}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={["#8ec5ff", "#7ee8fa"]}
-                  style={styles.iconButtonGradient}
-                >
-                  <Text style={styles.iconButtonText}>+</Text>
-                </LinearGradient>
-                <Text style={styles.iconLabel}>أضف مرفق</Text>
-              </TouchableOpacity>
-
-              <View style={{ flex: 1 }} />
-
-              <Animated.View style={{ transform: [{ scale: submitScale }] }}>
-                <TouchableOpacity
-                  onPress={onPressSubmit}
-                  activeOpacity={0.9}
-                  disabled={loading}
-                  style={styles.submitWrap}
-                >
-                  <LinearGradient
-                    colors={["#8ec5ff", "#7ee8fa"]}
-                    start={[0, 0]}
-                    end={[1, 1]}
-                    style={styles.submitButton}
-                  >
-                    {loading ? (
-                      <ActivityIndicator color="#0b0b0b" />
-                    ) : (
-                      <Text style={styles.submitText}>إرسال</Text>
-                    )}
-                  </LinearGradient>
-                </TouchableOpacity>
-              </Animated.View>
-            </View>
-
-            <Animated.View
-              style={[
-                styles.attachmentsContainer,
-                { opacity: attachmentsFade },
-              ]}
-            >
-              {attachments.map((a, i) => (
-                <View key={i} style={styles.attachmentRow}>
-                  {a.isImage ? (
-                    <Image source={{ uri: a.uri }} style={styles.thumb} />
-                  ) : (
-                    <View style={styles.fileIcon}>
-                      <Text style={{ color: "#fff", fontSize: 12 }}>FILE</Text>
+                  {attachments.map((a, i) => (
+                    <View key={i} style={[styles.attachmentRow, { backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "#f0f0f0", borderColor }]}>
+                      {a.isImage ? (
+                        <Image source={{ uri: a.uri }} style={styles.thumb} />
+                      ) : (
+                        <View style={[styles.fileIcon, { backgroundColor: colors.primary }]}>
+                          <MaterialCommunityIcons name="file" size={20} color="#fff" />
+                        </View>
+                      )}
+                      <View style={{ flex: 1, marginHorizontal: 10 }}>
+                        <Text numberOfLines={1} style={[styles.attachmentName, { color: textColor }]}>
+                          {a.name || a.uri.split("/").pop()}
+                        </Text>
+                        <Text style={[styles.attachmentMeta, { color: secondaryTextColor }]}>{a.mime}</Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => removeAttachment(i)}
+                        style={[styles.removeBtn, { backgroundColor: `${colors.error}20` }]}
+                      >
+                        <Text style={{ color: colors.error, fontWeight: "600" }}>حذف</Text>
+                      </TouchableOpacity>
                     </View>
-                  )}
-                  <View style={{ flex: 1, marginHorizontal: 10 }}>
-                    <Text numberOfLines={1} style={styles.attachmentName}>
-                      {a.name || a.uri.split("/").pop()}
-                    </Text>
-                    <Text style={styles.attachmentMeta}>{a.mime}</Text>
-                  </View>
+                  ))}
+                </Animated.View>
+              </View>
+            </ScrollView>
+
+            <Modal
+              transparent
+              visible={modalVisible}
+              animationType="slide"
+              onRequestClose={() => setModalVisible(false)}
+            >
+              <TouchableOpacity
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setModalVisible(false)}
+              >
+                <View style={[styles.modalSheet, { backgroundColor: isDark ? "rgba(10, 20, 24, 0.95)" : "rgba(255, 255, 255, 0.95)" }]}>
+                  <Text style={[styles.sheetTitle, { color: textColor }]}>أضف مرفق</Text>
+                  <TouchableOpacity style={[styles.sheetBtn, { borderColor }]} onPress={pickImage}>
+                    <MaterialCommunityIcons name="image" size={20} color={colors.primary} />
+                    <Text style={[styles.sheetBtnText, { color: textColor }]}>اختيار صورة</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.sheetBtn, { borderColor }]} onPress={pickFile}>
+                    <MaterialCommunityIcons name="file" size={20} color={colors.primary} />
+                    <Text style={[styles.sheetBtnText, { color: textColor }]}>اختيار ملف</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity
-                    onPress={() => removeAttachment(i)}
-                    style={styles.removeBtn}
+                    style={[styles.sheetBtn, { opacity: 0.8, borderColor }]}
+                    onPress={() => setModalVisible(false)}
                   >
-                    <Text style={{ color: "#fff" }}>حذف</Text>
+                    <Text style={[styles.sheetBtnText, { color: textColor }]}>إلغاء</Text>
                   </TouchableOpacity>
                 </View>
-              ))}
-            </Animated.View>
+              </TouchableOpacity>
+            </Modal>
           </View>
-        </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
 
-        <Modal
-          transparent
-          visible={modalVisible}
-          animationType="slide"
-          onRequestClose={() => setModalVisible(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setModalVisible(false)}
-          >
-            <View style={styles.modalSheet}>
-              <Text style={styles.sheetTitle}>أضف مرفق</Text>
-              <TouchableOpacity style={styles.sheetBtn} onPress={pickImage}>
-                <Text style={styles.sheetBtnText}>اختيار صورة</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.sheetBtn} onPress={pickFile}>
-                <Text style={styles.sheetBtnText}>اختيار ملف</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.sheetBtn, { opacity: 0.8 }]}
-                // onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.sheetBtnText}>إلغاء</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-      </LinearGradient>
-    </KeyboardAvoidingView>
+      <Modal visible={loading} transparent animationType="fade">
+        <BlurView intensity={90} style={styles.loadingContainer}>
+          <View style={styles.loadingContent}>
+            <Animated.View style={{ transform: [{ rotate: spinRotation }] }}>
+              <MaterialCommunityIcons
+                name="loading"
+                size={60}
+                color={colors.primary}
+              />
+            </Animated.View>
+            <Text style={[styles.loadingText, { color: textColor }]}>جارٍ إرسال الشكوى...</Text>
+          </View>
+        </BlurView>
+      </Modal>
+    </>
   );
 }
 
-/* FloatingInput component: animated label that shrinks when there's value or focus */
 function FloatingInput({
   label,
   value,
   onChangeText,
   multiline = false,
   numberOfLines = 1,
+  theme = "dark",
+  icon,
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
   multiline?: boolean;
   numberOfLines?: number;
+  theme?: string;
+  icon?: string;
 }) {
   const focus = useRef(new Animated.Value(value ? 1 : 0)).current;
 
@@ -397,6 +657,8 @@ function FloatingInput({
     }
   };
 
+  const isDark = theme === "dark";
+  const colors = isDark ? COLORS.dark : COLORS.light;
   const labelStyle = {
     transform: [
       {
@@ -417,8 +679,19 @@ function FloatingInput({
 
   return (
     <View style={{ marginBottom: 12 }}>
-      <View style={styles.inputWrap}>
-        <Animated.Text style={[styles.inputLabel, labelStyle]}>
+      <View style={[styles.inputWrap, { 
+        backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#f5f7fb",
+        borderColor: isDark ? "rgba(255,255,255,0.1)" : colors.border,
+      }]}>
+        {icon && (
+          <MaterialCommunityIcons
+            name={icon}
+            size={18}
+            color={isDark ? "rgba(255,255,255,0.4)" : colors.textSecondary}
+            style={styles.inputIcon}
+          />
+        )}
+        <Animated.Text style={[styles.inputLabel, labelStyle, { color: isDark ? "rgba(255,255,255,0.7)" : colors.textSecondary }]}>
           {label}
         </Animated.Text>
         <TextInput
@@ -428,10 +701,12 @@ function FloatingInput({
           onBlur={onBlur}
           style={[
             styles.input,
+            { color: isDark ? "#fff" : colors.text },
             multiline && { height: Math.max(80, 24 * numberOfLines) },
+            !value && !focus && { textAlign: "center" },
           ]}
           placeholder={focus ? "" : undefined}
-          placeholderTextColor="rgba(129, 102, 102, 0.45)"
+          placeholderTextColor={isDark ? "rgba(129, 102, 102, 0.45)" : colors.textSecondary}
           multiline={multiline}
         />
       </View>
@@ -440,79 +715,137 @@ function FloatingInput({
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    direction: "rtl",
+  },
   gradient: { flex: 1 },
-  container: { padding: 20, paddingBottom: 40 },
+  scrollContent: { padding: 20, paddingBottom: 40 },
   header: {
     marginBottom: 12,
     borderRadius: 14,
     padding: 16,
     overflow: "hidden",
-    backgroundColor: "rgba(255,255,255,0.02)",
   },
   headerBlur: {
     borderRadius: 14,
     padding: 16,
     overflow: "hidden",
-    backgroundColor: "hsla(0, 90%, 43%, 0.02)",
   },
-  title: { color: "#fff", fontSize: 20, fontWeight: "800", marginBottom: 6 },
-  subtitle: { color: "#ffffffbf", fontSize: 13 },
+  title: { fontSize: 20, fontWeight: "800", marginBottom: 6, textAlign: "right" },
+  subtitle: { fontSize: 13, textAlign: "right" },
 
   card: {
-    backgroundColor: "rgba(255,255,255,0.04)",
     borderRadius: 16,
-    padding: 14,
+    padding: 16,
     shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 12,
+    marginTop: 8,
+    textAlign: "right",
   },
 
   inputWrap: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingTop: 14,
+    paddingHorizontal: 8,
+    paddingTop: 8,
     paddingBottom: 8,
     position: "relative",
-    backgroundColor: "rgba(255,255,255,0.02)",
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    minHeight: 48,
+  },
+  inputIcon: {
+    marginLeft: 8,
   },
   inputLabel: {
     position: "absolute",
-    left: 14,
+    right: 40,
     top: 14,
-    color: "rgba(255,255,255,0.9)",
     fontSize: 13,
     fontWeight: "600",
     zIndex: 10,
   },
   input: {
-    color: "#fff",
+    flex: 1,
     padding: 0,
-    marginTop: 8,
+    marginTop: 0,
+    marginRight: 12,
     fontSize: 15,
+    textAlign: "right",
+    height: 40,
+  },
+  locationButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  helperText: {
+    fontSize: 11,
+    marginTop: 6,
+    textAlign: "right",
+    fontStyle: "italic",
   },
 
   label: {
-    color: "rgba(255,255,255,0.8)",
-    marginVertical: 8,
+    marginBottom: 8,
     fontWeight: "700",
+    textAlign: "right",
+    fontSize: 13,
   },
-  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
-    marginRight: 8,
+  typesScroll: {
     marginBottom: 8,
   },
-  chipText: { color: "rgba(255,255,255,0.9)" },
+  typesScrollContent: {
+    paddingHorizontal: 0,
+    gap: 8,
+    flexDirection: "row-reverse",
+  },
+  typeChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 80,
+  },
+  typeChipText: {
+    fontWeight: "600",
+    fontSize: 12,
+    textAlign: "center",
+  },
 
-  actionsRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
+  priorityRow: {
+    flexDirection: "row-reverse",
+    gap: 8,
+    marginBottom: 12,
+  },
+  priorityButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  priorityText: {
+    fontWeight: "600",
+    fontSize: 12,
+    textAlign: "center",
+  },
+
+  actionsRow: { flexDirection: "row-reverse", alignItems: "center", marginTop: 8, justifyContent: "space-between" },
   iconButton: { alignItems: "center", width: 86 },
   iconButtonGradient: {
     width: 56,
@@ -521,44 +854,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  iconButtonText: { fontSize: 28, color: "#03314b", fontWeight: "900" },
-  iconLabel: { color: "rgba(255,255,255,0.85)", marginTop: 6, fontSize: 12 },
+  iconLabel: { marginTop: 6, fontSize: 12 },
 
   submitWrap: { borderRadius: 14, overflow: "hidden" },
   submitButton: {
-    marginRight: 20,
+    marginLeft: 20,
     paddingVertical: 12,
     borderRadius: 13,
     minWidth: 120,
     alignItems: "center",
+    justifyContent: "center",
   },
-  submitText: { color: "rgba(15, 21, 22, 1)", fontWeight: "900", margin: 12 },
+  submitText: { fontWeight: "900", fontSize: 15 },
 
   attachmentsContainer: { marginTop: 12 },
   attachmentRow: {
-    flexDirection: "row",
+    flexDirection: "row-reverse",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.03)",
     padding: 8,
     borderRadius: 10,
     marginBottom: 8,
+    borderWidth: 1,
   },
-  thumb: { width: 52, height: 52, borderRadius: 8 },
+  thumb: { width: 52, height: 52, borderRadius: 8, marginLeft: 10 },
   fileIcon: {
     width: 52,
     height: 52,
     borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.06)",
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: 10,
   },
-  attachmentName: { color: "#fff", fontWeight: "600" },
-  attachmentMeta: { color: "rgba(255,255,255,0.45)", fontSize: 12 },
+  attachmentName: { fontWeight: "600", textAlign: "right" },
+  attachmentMeta: { fontSize: 12, textAlign: "right", marginTop: 2 },
   removeBtn: {
-    backgroundColor: "rgba(255,0,60,0.12)",
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
+    marginRight: 8,
   },
 
   modalOverlay: {
@@ -567,23 +900,42 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalSheet: {
-    backgroundColor: "#578ac6ff",
     padding: 18,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
+    borderTopWidth: 1,
   },
   sheetTitle: {
-    color: "#fff",
     fontSize: 16,
     marginBottom: 12,
     fontWeight: "700",
+    textAlign: "right",
   },
   sheetBtn: {
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.03)",
     marginBottom: 10,
     alignItems: "center",
+    flexDirection: "row-reverse",
+    gap: 8,
+    borderWidth: 1,
+    justifyContent: "center",
   },
-  sheetBtnText: { color: "#fff", fontWeight: "700" },
+  sheetBtnText: { fontWeight: "700", textAlign: "center" },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingContent: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+  },
 });
