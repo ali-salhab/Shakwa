@@ -25,6 +25,7 @@ import api from "../../src/api";
 import { useTheme } from "../../src/hooks/useTheme";
 import { useComplaints } from "../../src/hooks/useComplaints";
 import { COLORS } from "../../theme/colors";
+import { FONTS } from "../../theme/fonts";
 
 type Attachment = {
   uri: string;
@@ -55,6 +56,19 @@ const PRIORITY_OPTIONS = [
   { label: "عالية", value: "high" },
 ];
 
+const POPULAR_LOCATIONS = [
+  "الرياض - المركز",
+  "الرياض - حي النخيل",
+  "الرياض - حي العليا",
+  "الرياض - حي الملز",
+  "الرياض - حي النزهة",
+  "الرياض - حي الصفا",
+  "الرياض - حي السلي",
+  "الرياض - حي الهدية",
+  "الرياض - حي ظهرة لبن",
+  "الرياض - حي الربيع",
+];
+
 export default function AddComplaint() {
   const { themeType } = useTheme();
   const { addComplaint } = useComplaints();
@@ -69,6 +83,7 @@ export default function AddComplaint() {
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [locationModalVisible, setLocationModalVisible] = useState(false);
 
   const headerAnim = useRef(new Animated.Value(0)).current;
   const submitScale = useRef(new Animated.Value(1)).current;
@@ -142,59 +157,9 @@ export default function AddComplaint() {
     setAttachments(next);
   };
 
-  const requestLocationPermission = async () => {
-    try {
-      setLocationLoading(true);
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      
-      if (status !== "granted") {
-        Alert.alert(
-          "إذن مرفوض",
-          "يرجى تفعيل إذن الموقع في إعدادات التطبيق للمتابعة"
-        );
-        setLocationLoading(false);
-        return;
-      }
-
-      const currentLocation = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const { latitude, longitude } = currentLocation.coords;
-      
-      try {
-        const reverseGeocode = await Location.reverseGeocodeAsync({
-          latitude,
-          longitude,
-        });
-
-        if (reverseGeocode && reverseGeocode.length > 0) {
-          const address = reverseGeocode[0];
-          const locationText = [
-            address.name,
-            address.street,
-            address.city,
-            address.region,
-          ]
-            .filter(Boolean)
-            .join(", ");
-          setLocation(locationText || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-        } else {
-          setLocation(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-        }
-        Alert.alert("نجاح", "تم الحصول على موقعك بنجاح");
-      } catch {
-        setLocation(`${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
-        Alert.alert("نجاح", "تم الحصول على إحداثيات موقعك");
-      }
-    } catch (error: any) {
-      Alert.alert(
-        "خطأ",
-        error.message || "حدث خطأ أثناء الحصول على الموقع"
-      );
-    } finally {
-      setLocationLoading(false);
-    }
+  const handleSelectLocation = (selectedLocation: string) => {
+    setLocation(selectedLocation);
+    setLocationModalVisible(false);
   };
 
   const isFormValid = title.trim() && description.trim() && type.trim();
@@ -371,22 +336,14 @@ export default function AddComplaint() {
                     borderColor: isDark ? "rgba(255,255,255,0.1)" : colors.border,
                   }]}>
                     <TouchableOpacity
-                      onPress={requestLocationPermission}
-                      disabled={locationLoading}
+                      onPress={() => setLocationModalVisible(true)}
                       style={styles.locationButton}
                     >
-                      <ActivityIndicator
-                        animating={locationLoading}
-                        size="small"
+                      <MaterialCommunityIcons
+                        name="map-marker"
+                        size={18}
                         color={colors.primary}
                       />
-                      {!locationLoading && (
-                        <MaterialCommunityIcons
-                          name="map-marker"
-                          size={18}
-                          color={colors.primary}
-                        />
-                      )}
                     </TouchableOpacity>
                     <TextInput
                       value={location}
@@ -400,7 +357,7 @@ export default function AddComplaint() {
                     />
                   </View>
                   <Text style={[styles.helperText, { color: secondaryTextColor }]}>
-                    اضغط على الأيقونة للحصول على موقعك تلقائياً
+                    اضغط على الأيقونة لاختيار موقع من القائمة المقترحة
                   </Text>
                 </View>
 
@@ -561,6 +518,41 @@ export default function AddComplaint() {
                 </Animated.View>
               </View>
             </ScrollView>
+
+            <Modal
+              transparent
+              visible={locationModalVisible}
+              animationType="slide"
+              onRequestClose={() => setLocationModalVisible(false)}
+            >
+              <TouchableOpacity
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setLocationModalVisible(false)}
+              >
+                <View style={[styles.modalSheet, { backgroundColor: isDark ? "rgba(10, 20, 24, 0.95)" : "rgba(255, 255, 255, 0.95)" }]}>
+                  <Text style={[styles.sheetTitle, { color: textColor }]}>اختر موقعاً</Text>
+                  <ScrollView style={styles.locationList}>
+                    {POPULAR_LOCATIONS.map((loc, idx) => (
+                      <TouchableOpacity 
+                        key={idx}
+                        style={[styles.locationOption, { borderColor }]}
+                        onPress={() => handleSelectLocation(loc)}
+                      >
+                        <MaterialCommunityIcons name="map-marker" size={20} color={colors.primary} />
+                        <Text style={[styles.locationOptionText, { color: textColor }]}>{loc}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                  <TouchableOpacity
+                    style={[styles.sheetBtn, { opacity: 0.8, borderColor }]}
+                    onPress={() => setLocationModalVisible(false)}
+                  >
+                    <Text style={[styles.sheetBtnText, { color: textColor }]}>إلغاء</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            </Modal>
 
             <Modal
               transparent
@@ -732,8 +724,8 @@ const styles = StyleSheet.create({
     padding: 16,
     overflow: "hidden",
   },
-  title: { fontSize: 20, fontWeight: "800", marginBottom: 6, textAlign: "right" },
-  subtitle: { fontSize: 13, textAlign: "right" },
+  title: { fontSize: 20, fontWeight: "800", marginBottom: 6, textAlign: "right", fontFamily: FONTS.bold },
+  subtitle: { fontSize: 13, textAlign: "right", fontFamily: FONTS.regular },
 
   card: {
     borderRadius: 16,
@@ -752,6 +744,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
     textAlign: "right",
+    fontFamily: FONTS.bold,
   },
 
   inputWrap: {
@@ -775,6 +768,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     zIndex: 10,
+    fontFamily: FONTS.semiBold,
   },
   input: {
     flex: 1,
@@ -784,6 +778,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: "right",
     height: 40,
+    fontFamily: FONTS.regular,
   },
   locationButton: {
     paddingHorizontal: 8,
@@ -937,5 +932,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     textAlign: "center",
+  },
+  locationList: {
+    maxHeight: 300,
+    marginBottom: 12,
+  },
+  locationOption: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 10,
+    gap: 12,
+  },
+  locationOptionText: {
+    fontWeight: "600",
+    fontSize: 14,
+    textAlign: "right",
+    flex: 1,
   },
 });

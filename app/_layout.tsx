@@ -9,9 +9,31 @@ import { View } from "react-native";
 import { useLanguage } from "../src/hooks/useLanguage";
 import * as Notifications from "expo-notifications";
 import React, { useEffect } from "react";
+import * as Font from "expo-font";
+import {
+  Changa_400Regular,
+  Changa_500Medium,
+  Changa_600SemiBold,
+  Changa_700Bold,
+} from "@expo-google-fonts/changa";
 
 function RootLayoutContent() {
   const { loading, language } = useLanguage();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await Font.loadAsync({
+          "Changa-Regular": Changa_400Regular,
+          "Changa-Medium": Changa_500Medium,
+          "Changa-SemiBold": Changa_600SemiBold,
+          "Changa-Bold": Changa_700Bold,
+        });
+      } catch (error) {
+        console.warn("Error loading Changa font:", error);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     (async () => {
