@@ -22,7 +22,7 @@ export default function MyComplaints() {
       setList(res.data);
     } catch (e) {
       console.warn(e);
-      alert("فشل جلب الشكاوى");
+      // alert("");
     } finally {
       setLoading(false);
     }

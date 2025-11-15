@@ -30,7 +30,7 @@ export default function Profile() {
       <View style={{ marginTop: 20 }}>
         <Button
           title="تسجيل خروج"
-          color="#d33"
+          color="#d33eee"
           onPress={async () => {
             await logout();
             router.replace("/(auth)/login");

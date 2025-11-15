@@ -1,12 +1,13 @@
 // app/(tabs)/_layout.tsx
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Animated } from "react-native";
+import { StyleSheet, Animated, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import React from "react";
 
 export default function TabsLayout() {
   const animatedValue = React.useRef(new Animated.Value(0)).current;
+  const { height } = useWindowDimensions();
 
   React.useEffect(() => {
     Animated.loop(
@@ -41,7 +42,7 @@ export default function TabsLayout() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { minHeight: height }]}>
       <Animated.View
         style={[styles.animatedContainer, animatedStyle]}
       ></Animated.View>
@@ -58,9 +59,9 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="add-complaint"
           options={{
-            title: "إضافة شكوى",
+            title: " شكوى",
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="add" size={size} color={color} />
+              <Ionicons name="document-text" size={size} color={color} />
             ),
           }}
         />
@@ -84,7 +85,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   animatedContainer: {
-    flex: 1,
+    // flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },

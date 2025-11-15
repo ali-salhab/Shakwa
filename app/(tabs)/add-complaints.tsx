@@ -276,7 +276,7 @@ export default function AddComplaint() {
                   style={styles.submitWrap}
                 >
                   <LinearGradient
-                    colors={["#ffd166", "#06d6a0"]}
+                    colors={["#8ec5ff", "#7ee8fa"]}
                     start={[0, 0]}
                     end={[1, 1]}
                     style={styles.submitButton}
@@ -345,7 +345,7 @@ export default function AddComplaint() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.sheetBtn, { opacity: 0.8 }]}
-                onPress={() => setModalVisible(false)}
+                // onPress={() => setModalVisible(false)}
               >
                 <Text style={styles.sheetBtnText}>إلغاء</Text>
               </TouchableOpacity>
@@ -431,7 +431,7 @@ function FloatingInput({
             multiline && { height: Math.max(80, 24 * numberOfLines) },
           ]}
           placeholder={focus ? "" : undefined}
-          placeholderTextColor="rgba(255,255,255,0.45)"
+          placeholderTextColor="rgba(129, 102, 102, 0.45)"
           multiline={multiline}
         />
       </View>
@@ -442,15 +442,21 @@ function FloatingInput({
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
   container: { padding: 20, paddingBottom: 40 },
-  header: { marginBottom: 16 },
-  headerBlur: {
+  header: {
+    marginBottom: 12,
     borderRadius: 14,
     padding: 16,
     overflow: "hidden",
     backgroundColor: "rgba(255,255,255,0.02)",
   },
+  headerBlur: {
+    borderRadius: 14,
+    padding: 16,
+    overflow: "hidden",
+    backgroundColor: "hsla(0, 90%, 43%, 0.02)",
+  },
   title: { color: "#fff", fontSize: 20, fontWeight: "800", marginBottom: 6 },
-  subtitle: { color: "rgba(255,255,255,0.75)", fontSize: 13 },
+  subtitle: { color: "#ffffffbf", fontSize: 13 },
 
   card: {
     backgroundColor: "rgba(255,255,255,0.04)",
@@ -520,13 +526,13 @@ const styles = StyleSheet.create({
 
   submitWrap: { borderRadius: 14, overflow: "hidden" },
   submitButton: {
-    paddingHorizontal: 20,
+    marginRight: 20,
     paddingVertical: 12,
-    borderRadius: 14,
+    borderRadius: 13,
     minWidth: 120,
     alignItems: "center",
   },
-  submitText: { color: "#072227", fontWeight: "900" },
+  submitText: { color: "rgba(15, 21, 22, 1)", fontWeight: "900", margin: 12 },
 
   attachmentsContainer: { marginTop: 12 },
   attachmentRow: {
@@ -561,7 +567,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalSheet: {
-    backgroundColor: "#021428",
+    backgroundColor: "#578ac6ff",
     padding: 18,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
